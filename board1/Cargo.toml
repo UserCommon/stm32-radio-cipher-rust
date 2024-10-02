@@ -22,6 +22,8 @@ futures = { version = "0.3.17", default-features = false, features = ["async-awa
 heapless = { version = "0.8", default-features = false }
 nb = "1.0.0"
 
+cmt2300a = { path = "../cmt2300a" }
+
 [profile.dev]
 opt-level = "s"
 

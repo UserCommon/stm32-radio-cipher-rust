@@ -1,7 +1,12 @@
 [package]
-name = "board2"
+name = "cmt2300a"
 version = "0.1.0"
 edition = "2021"
+
+
+[lib]
+name = "cmt2300a"
+path = "src/lib.rs" 
 
 [dependencies]
 embassy-stm32 = { version = "0.1.0", features = ["defmt", "stm32f103c8", "unstable-pac", "memory-x", "time-driver-any"] }
@@ -21,11 +26,3 @@ panic-probe = { version = "0.3", features = ["print-defmt"] }
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 heapless = { version = "0.8", default-features = false }
 nb = "1.0.0"
-
-cmt2300a = { path = "../cmt2300a" }
-
-[profile.dev]
-opt-level = "s"
-
-[profile.release]
-debug = 2

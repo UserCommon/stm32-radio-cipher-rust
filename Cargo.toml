@@ -2,5 +2,6 @@
 members = [
     "board1",
     "board2",
+    "cmt2300a",
 ]
 resolver = "2"

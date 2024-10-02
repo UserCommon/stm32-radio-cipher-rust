@@ -2,12 +2,20 @@
 #![no_main]
 
 
+// RECV, BLUE LIGHT BOARD
+
 use defmt::{info, unwrap};
 use embassy_executor::Spawner;
-use embassy_stm32::{gpio::{Input, Level, Output, Pull, Speed}, peripherals::{self, DMA1_CH3, DMA1_CH4, PB3, PB4, PB5, SPI2}};
+use embassy_stm32::{gpio::{Input, Level, Output, Pull, Speed}, peripherals::{self, DMA1_CH3, DMA1_CH4, DMA1_CH5, PB3, PB4, PB5, SPI2}};
 use embassy_stm32::spi;
-use embassy_time::{Timer, Duration};
+use embassy_sync::channel::SendFuture;
+use embassy_time::{Delay, Duration, Timer};
 use {defmt_rtt as _, panic_probe as _};
+use cmt2300a::CMT2300A;
+
+
+type SPI = spi::Spi<'static, SPI2, DMA1_CH5, DMA1_CH3>;
+type CMT = CMT2300A<'static, SPI2, DMA1_CH5, DMA1_CH3, PB4>;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -18,59 +26,42 @@ async fn main(spawner: Spawner) {
 
     // SPI 
     let spi_config = spi::Config::default();
-    let mut spi = spi::Spi::new_txonly(
+    let spi = spi::Spi::new_txonly(
         p.SPI2,         // SPI peripheral
         p.PB13,         // SCK pin
         p.PB15,         // MOSI pin
-        p.DMA1_CH4,     // TX DMA channel
+        p.DMA1_CH5,     // TX DMA channel
         p.DMA1_CH3,     // RX DMA channel (not used, will be removed in the future)
         spi_config
     ); // PB13 (SCLK), PB15 (SDIO)
      // Configure the Chip Select (CS) pin on PB4
-    let mut cs = Output::new(p.PB4, Level::High, Speed::Medium);
+    let csb = Output::new(p.PB4, Level::High, Speed::Medium);
     // Configure FCSB pin on PB5 as output
-    let mut fcsb = Output::new(p.PB5, Level::High, Speed::Medium);
+    // let mut fcsb = Output::new(p.PB5, Level::Low, Speed::Medium);
     // Configure NIQR pin on PB3 as input (interrupt)
-    let irq = Input::new(p.PB3, Pull::Up);
-    unwrap!(spawner.spawn(tx(spi, cs, fcsb, irq)));
-    
+    // let irq = Input::new(p.PB3, Pull::Up);
+    // unwrap!(spawner.spawn(tx(spi, cs, irq)));
+    let transmitter = CMT2300A::new(spi, csb);
+    unwrap!(spawner.spawn(tx(transmitter)));
+
 }
 
 #[embassy_executor::task]
 async fn tx(
-    mut spi: spi::Spi<'static, SPI2, DMA1_CH4, DMA1_CH3>,
-    mut cs: Output<'static, PB4>,
-    mut fcsb: Output<'static, PB5>,
-    mut irq: Input<'static, PB3>
+    mut transmitter: CMT
 ) {
-    // Reset the module
-    cs.set_low();
-    embassy_time::Timer::after(Duration::from_millis(10)).await;
-    cs.set_high();
-
-    // Prepare data for SPI transfer (e.g., read/write CMT2300A registers)
-    let mut read_buf: [u16; 2] = [0x00; 2]; // Buffer for reading data
-    let write_buf: [u16; 2] = [0xAA, 0xBB]; // Data to be written
-
+    let buf: &[u8; 6] = b"Hello!";
     loop {
-        // Perform SPI transfer
-        cs.set_low(); // Select the device
-        let result = spi.blocking_transfer(&mut read_buf, &write_buf);
-        cs.set_high(); // Deselect the device
-
-        match result {
-            Ok(_) => {
-                // Handle successful transfer
-                defmt::info!("SPI transfer successful: Read = {:?}", read_buf);
-            }
-            Err(e) => {
-                // Handle SPI transfer error
-                defmt::error!("SPI transfer error: {:?}", e);
-            }
+        Timer::after_millis(10).await;
+        let res = transmitter.transmit(buf).await;
+        if let Err(err) = res {
+            info!("Failed to tranmit data: {:?}", err);
+        } else {
+            info!("Successfully tranmitted data!");
         }
-        Timer::after(Duration::from_millis(2000)).await;
     }
 }
+
 
 #[embassy_executor::task]
 async fn blinker(mut led: Output<'static, peripherals::PC13>, interval: Duration) {
@@ -81,4 +72,23 @@ async fn blinker(mut led: Output<'static, peripherals::PC13>, interval: Duration
         Timer::after(interval).await;
     }
 }
+
+// // Configure CMT2300A for RX mode
+// async fn configure_cmt2300a(spi: &mut SPI, delay: &mut Delay) {
+//     // Configure for RX
+//     cmt2300a_write_register(spi, 0x20, 0x10).await;
+//     delay.delay_ms(1).await;
+// }
+
+// async fn cmt2300a_receive_data(spi: &mut SPI) -> [u8; 16] {
+//     let mut buffer = [0u8; 16];
+//     spi.blocking_transfer_in_place(&mut buffer).await.unwrap();
+//     buffer
+// }
+
+// // SPI write helper
+// async fn cmt2300a_write_register(spi: &mut SPI, address: u8, value: u8) {
+//     let mut buffer = [address, value];
+//     spi.blocking_transfer_in_place(&mut buffer).await.unwrap();
+// }
 
