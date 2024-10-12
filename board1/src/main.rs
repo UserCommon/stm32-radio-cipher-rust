@@ -4,91 +4,107 @@
 
 // RECV, BLUE LIGHT BOARD
 
-use defmt::{info, unwrap};
+use core::{convert::Infallible, fmt};
+
+use defmt::{info, unwrap, error};
 use embassy_executor::Spawner;
-use embassy_stm32::{gpio::{Input, Level, Output, Pull, Speed}, peripherals::{self, DMA1_CH3, DMA1_CH4, DMA1_CH5, PB3, PB4, PB5, SPI2}};
+use embassy_stm32::{gpio::{Input, Level, Output, Pull, Speed}, pac::SPI1, peripherals::{self, DMA1_CH3, DMA1_CH4, DMA1_CH5, PB3, PB4, PB5, SPI1, SPI2}};
 use embassy_stm32::spi;
+use embassy_stm32::interrupt;
 use embassy_sync::channel::SendFuture;
+use embassy_futures::select::{Either, select};
+
+use embedded_hal_async::{spi::SpiBus, delay};
+use embedded_hal::{self, digital::v2::OutputPin};
 use embassy_time::{Delay, Duration, Timer};
 use {defmt_rtt as _, panic_probe as _};
-use cmt2300a::CMT2300A;
+use nrf24_driver::{Nrf24l01Bulider, Nrf24l01};
 
-
-type SPI = spi::Spi<'static, SPI2, DMA1_CH5, DMA1_CH3>;
-type CMT = CMT2300A<'static, SPI2, DMA1_CH5, DMA1_CH3, PB4>;
-
+// type SPI = spi::Spi<'static, SPI1, DMA1_CH5, DMA1_CH4;
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    // Peripherals
     let config = embassy_stm32::Config::default();
     let p = embassy_stm32::init(config);
+
+    // LED TASK
     let led = Output::new(p.PC13, Level::Low, Speed::Medium);
-    unwrap!(spawner.spawn(blinker(led, Duration::from_millis(1000))));
+    // unwrap!(spawner.spawn(blinker(led, Duration::from_millis(1000))));
 
-    // SPI 
+    // SPI
     let spi_config = spi::Config::default();
-    let spi = spi::Spi::new_txonly(
-        p.SPI2,         // SPI peripheral
-        p.PB13,         // SCK pin
-        p.PB15,         // MOSI pin
-        p.DMA1_CH5,     // TX DMA channel
-        p.DMA1_CH3,     // RX DMA channel (not used, will be removed in the future)
-        spi_config
-    ); // PB13 (SCLK), PB15 (SDIO)
-     // Configure the Chip Select (CS) pin on PB4
-    let csb = Output::new(p.PB4, Level::High, Speed::Medium);
-    // Configure FCSB pin on PB5 as output
-    // let mut fcsb = Output::new(p.PB5, Level::Low, Speed::Medium);
-    // Configure NIQR pin on PB3 as input (interrupt)
-    // let irq = Input::new(p.PB3, Pull::Up);
-    // unwrap!(spawner.spawn(tx(spi, cs, irq)));
-    let transmitter = CMT2300A::new(spi, csb);
-    unwrap!(spawner.spawn(tx(transmitter)));
+    let spi = spi::Spi::new(
+        p.SPI1,           // SPI peripheral
+        p.PB3,            // SCK pin on B3
+        p.PB5,            // MOSI pin on B5
+        p.PB4,            // MISO pin on B4
+        p.DMA1_CH3,       // TX DMA
+        p.DMA1_CH2,       // RX DMA
+        spi_config,       // SPI configuration
+    );
+    // GPIO for CE (Chip Enable)
+    let mut ce = Output::new(p.PA11, Level::Low, Speed::Medium);  // CE pin on PA11
 
+    // GPIO for CSN (Chip Select Not)
+    let mut csn = Output::new(p.PA12, Level::High, Speed::Medium); // CSN pin on PA12
+
+    // GPIO for IRQ (Interrupt)
+    let irq_pin = Input::new(p.PA15, Pull::None);  // IRQ pin on PA15
+
+    // nrf
+    // Wrap the SPI
+    let mut nrf = Nrf24l01Bulider::default()
+        .spi(spi)
+        .csn(csn)
+        .ce(ce)
+        .timer(embassy_time::Delay)
+        .rx_address(b"00000")
+        .tx_address(b"00000")
+        .channel(5)
+        .payload_size(8)
+        .build().await.unwrap();
+    unwrap!(spawner.spawn(send_packages(nrf, led)));
 }
 
 #[embassy_executor::task]
-async fn tx(
-    mut transmitter: CMT
-) {
-    let buf: &[u8; 6] = b"Hello!";
+async fn send_packages(mut nrf: Nrf24l01<impl SpiBus<u8> + 'static, impl OutputPin + 'static, impl OutputPin + 'static, impl delay::DelayNs + 'static>, mut led: Output<'static, peripherals::PC13>) {
+    led.set_low();
     loop {
-        Timer::after_millis(10).await;
-        let res = transmitter.transmit(buf).await;
-        if let Err(err) = res {
-            info!("Failed to tranmit data: {:?}", err);
+        info!("Entering loop");
+        if let Ok(false) = nrf.is_sending().await {
+            info!("Not sending");
+            if let Ok(true) = nrf.data_ready().await {
+                info!("Data ready");
+                let mut buff = [1u8; 8];
+                if let Ok(()) = nrf.send(&buff).await {
+                    info!("Sent: {:?}", buff);
+                } else {
+                    info!("Failed to send data");
+                }
+                if let Ok(()) = nrf.receive(&mut buff).await {
+                    info!("Received: {:?}", buff);
+                } else {
+                    info!("Failed to receive data");
+                }
+                Timer::after_secs(1).await;
+            } else {
+                info!("No data ready");
+            }
         } else {
-            info!("Successfully tranmitted data!");
+            info!("Still sending");
         }
     }
 }
 
 
-#[embassy_executor::task]
-async fn blinker(mut led: Output<'static, peripherals::PC13>, interval: Duration) {
-    loop {
-        led.set_high();
-        Timer::after(interval).await;
-        led.set_low();
-        Timer::after(interval).await;
-    }
-}
 
-// // Configure CMT2300A for RX mode
-// async fn configure_cmt2300a(spi: &mut SPI, delay: &mut Delay) {
-//     // Configure for RX
-//     cmt2300a_write_register(spi, 0x20, 0x10).await;
-//     delay.delay_ms(1).await;
-// }
-
-// async fn cmt2300a_receive_data(spi: &mut SPI) -> [u8; 16] {
-//     let mut buffer = [0u8; 16];
-//     spi.blocking_transfer_in_place(&mut buffer).await.unwrap();
-//     buffer
-// }
-
-// // SPI write helper
-// async fn cmt2300a_write_register(spi: &mut SPI, address: u8, value: u8) {
-//     let mut buffer = [address, value];
-//     spi.blocking_transfer_in_place(&mut buffer).await.unwrap();
+// #[embassy_executor::task]
+// async fn blinker(mut led: Output<'static, peripherals::PC13>, interval: Duration) {
+//     loop {
+//         led.set_high();
+//         Timer::after(interval).await;
+//         led.set_low();
+//         Timer::after(interval).await;
+//     }
 // }
 

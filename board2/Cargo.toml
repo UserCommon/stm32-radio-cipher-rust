@@ -17,12 +17,14 @@ defmt-rtt = "0.4"
 cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7.0"
 embedded-hal = "0.2.6"
+embedded-hal-async = "1.0.0"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 heapless = { version = "0.8", default-features = false }
 nb = "1.0.0"
 
-cmt2300a = { path = "../cmt2300a" }
+embedded-nrf24l01-async = "0.3.1"
+nrf24_driver = { path = "../nrf24_driver" }
 
 [profile.dev]
 opt-level = "s"

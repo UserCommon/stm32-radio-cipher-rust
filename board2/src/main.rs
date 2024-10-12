@@ -2,71 +2,92 @@
 #![no_main]
 
 
-use defmt::{info, unwrap};
+// RECV, BLUE LIGHT BOARD
+
+use core::{convert::Infallible, fmt};
+
+use defmt::{info, unwrap, error};
 use embassy_executor::Spawner;
-use embassy_stm32::{gpio::{Input, Level, Output, Pull, Speed}, peripherals::{self, DMA1_CH1, DMA1_CH2, DMA1_CH3, DMA1_CH4, DMA1_CH5, PA3, PA4, PB0, PB3, PB4, PB5, SPI1}};
+use embassy_stm32::{gpio::{Input, Level, Output, Pull, Speed}, pac::SPI1, peripherals::{self, DMA1_CH3, DMA1_CH4, DMA1_CH5, PB3, PB4, PB5, SPI1, SPI2}};
 use embassy_stm32::spi;
-use embassy_time::{Timer, Duration};
+use embassy_stm32::interrupt;
+use embassy_sync::channel::SendFuture;
+use embedded_hal::{self, digital::v2::OutputPin};
+use embassy_time::{Delay, Duration, Timer};
+use embedded_hal_async::{delay, spi::SpiBus};
 use {defmt_rtt as _, panic_probe as _};
-
-use cmt2300a::CMT2300A;
-
-type CMT = CMT2300A<'static, SPI1, DMA1_CH3, DMA1_CH2, PA4>;
+use embedded_nrf24l01_async::{Configuration, DataRate, Device, StandbyMode, NRF24L01};
+use nrf24_driver::*;
+// type SPI = spi::Spi<'static, SPI1, DMA1_CH5, DMA1_CH4;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    // Peripherals
     let config = embassy_stm32::Config::default();
     let p = embassy_stm32::init(config);
+
+    // LED TASK
     let led = Output::new(p.PC13, Level::Low, Speed::Medium);
+    // unwrap!(spawner.spawn(blinker(led, Duration::from_millis(1000))));
 
-    // SPI 
+    // SPI
     let spi_config = spi::Config::default();
-    // Initialize GPIO pins
-    let csb = Output::new(p.PA4, Level::High, Speed::Medium); // CSB pin
-    // let fcsb = Output::new(p.PA3, Level::High, Speed::Medium); // FCSB pin
-    // let irq = Input::new(p.PB0, Pull::Up); // IRQ pin (interrupt)
-
-    // Initialize SPI pins
-    let spi = spi::Spi::new_rxonly(
+    let spi = spi::Spi::new(
         p.SPI1,           // SPI peripheral
-        p.PA5,            // SCK
-        p.PA6,            // MISO
-        p.DMA1_CH3,      // Rx DMA channel
-        p.DMA1_CH2,      // Tx DMA channel (if needed, otherwise can be removed)
-        spi_config
+        p.PB3,            // SCK pin on B3
+        p.PB5,            // MOSI pin on B5
+        p.PB4,            // MISO pin on B4
+        p.DMA1_CH3,       // TX DMA
+        p.DMA1_CH2,       // RX DMA
+        spi_config,       // SPI configuration
     );
+    // GPIO for CE (Chip Enable)
+    let mut ce = Output::new(p.PA11, Level::Low, Speed::Medium);  // CE pin on PA11
 
-    let reciever = CMT2300A::new(spi, csb);
-    unwrap!(spawner.spawn(blinker(led, Duration::from_millis(1000))));
-    unwrap!(spawner.spawn(rx(reciever)));
+    // GPIO for CSN (Chip Select Not)
+    let mut csn = Output::new(p.PA12, Level::High, Speed::Medium); // CSN pin on PA12
+
+    // GPIO for IRQ (Interrupt)
+    let irq_pin = Input::new(p.PA15, Pull::None);  // IRQ pin on PA15
+
+    // nrf
+    // Wrap the SPI
+    let mut nrf = Nrf24l01Bulider::default()
+        .spi(spi)
+        .csn(csn)
+        .ce(ce)
+        .timer(embassy_time::Delay)
+        .rx_address(b"00000")
+        .tx_address(b"00000")
+        .channel(5)
+        .payload_size(8)
+        .build().await.unwrap();
+    unwrap!(spawner.spawn(recv_packages(nrf, led)));
 }
 
 #[embassy_executor::task]
-async fn rx(
-    mut reciever: CMT
-) {
-    let buffer: &mut [u8; 6] = &mut [0, 0, 0, 0, 0, 0];
-
+async fn recv_packages(mut nrf: Nrf24l01<impl SpiBus<u8> + 'static,
+                                       impl OutputPin + 'static,
+                                       impl OutputPin + 'static,
+                                       impl delay::DelayNs + 'static>,
+                        mut led: Output<'static, peripherals::PC13>) {
+    led.set_low();
     loop {
-        let res = reciever.recieve(&mut buffer[..]).await;
-        match res {
-            Ok(_) => {
-                info!(
-                    "<***> Succesfully recieved data:\nRaw: {:?}\nAs str: {:?}",
-                    buffer,
-                    core::str::from_utf8(buffer).map_err(|_| spi::Error::Overrun)
-                );
+        // if let Ok(false) = nrf.is_sending().await {
+            if let Ok(true) = nrf.data_ready().await {
+                let mut buff = [1u8; 8];
+                if let Ok(()) = nrf.receive(&mut buff).await {
+                    info!("read: {:?}", buff);
+                }
+                Timer::after_secs(1).await;
+
+                // if let Ok(()) = nrf.send(&buff).await {
+                //     info!("send!");
+                // }
             }
-            Err(e) => {
-                info!(
-                    "<***> Error while recieving data: {:?}",
-                    e
-                );
-            }
-        }
+        // }
     }
 }
-
 
 #[embassy_executor::task]
 async fn blinker(mut led: Output<'static, peripherals::PC13>, interval: Duration) {

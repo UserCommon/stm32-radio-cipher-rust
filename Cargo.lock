@@ -48,11 +48,11 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 name = "board1"
 version = "0.1.0"
 dependencies = [
- "cmt2300a",
  "cortex-m",
  "cortex-m-rt",
  "defmt",
  "defmt-rtt",
+ "embassy-embedded-hal 0.2.0",
  "embassy-executor",
  "embassy-futures",
  "embassy-stm32",
@@ -60,17 +60,20 @@ dependencies = [
  "embassy-time",
  "embassy-usb",
  "embedded-hal 0.2.7",
+ "embedded-hal-async",
+ "embedded-nrf24l01-async",
  "futures",
  "heapless 0.8.0",
  "nb 1.1.0",
+ "nrf24_driver",
  "panic-probe",
+ "shared-bus",
 ]
 
 [[package]]
 name = "board2"
 version = "0.1.0"
 dependencies = [
- "cmt2300a",
  "cortex-m",
  "cortex-m-rt",
  "defmt",
@@ -82,9 +85,12 @@ dependencies = [
  "embassy-time",
  "embassy-usb",
  "embedded-hal 0.2.7",
+ "embedded-hal-async",
+ "embedded-nrf24l01-async",
  "futures",
  "heapless 0.8.0",
  "nb 1.1.0",
+ "nrf24_driver",
  "panic-probe",
 ]
 
@@ -112,27 +118,6 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
-
-[[package]]
-name = "cmt2300a"
-version = "0.1.0"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "defmt",
- "defmt-rtt",
- "embassy-executor",
- "embassy-futures",
- "embassy-stm32",
- "embassy-sync 0.5.0",
- "embassy-time",
- "embassy-usb",
- "embedded-hal 0.2.7",
- "futures",
- "heapless 0.8.0",
- "nb 1.1.0",
- "panic-probe",
-]
 
 [[package]]
 name = "cortex-m"
@@ -278,6 +263,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "embassy-embedded-hal"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5794414bc20e0d750f145bc0e82366b19dd078e9e075e8331fb8dd069a1cb6a2"
+dependencies = [
+ "embassy-futures",
+ "embassy-sync 0.6.0",
+ "embassy-time",
+ "embedded-hal 0.2.7",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "embedded-storage",
+ "embedded-storage-async",
+ "nb 1.1.0",
+]
+
+[[package]]
 name = "embassy-executor"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -356,7 +358,7 @@ dependencies = [
  "critical-section",
  "defmt",
  "document-features",
- "embassy-embedded-hal",
+ "embassy-embedded-hal 0.1.0",
  "embassy-futures",
  "embassy-hal-internal",
  "embassy-net-driver",
@@ -404,6 +406,19 @@ dependencies = [
  "cfg-if",
  "critical-section",
  "defmt",
+ "embedded-io-async",
+ "futures-util",
+ "heapless 0.8.0",
+]
+
+[[package]]
+name = "embassy-sync"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3e0c49ff02ebe324faf3a8653ba91582e2d0a7fdef5bc88f449d5aa1bfcc05c"
+dependencies = [
+ "cfg-if",
+ "critical-section",
  "embedded-io-async",
  "futures-util",
  "heapless 0.8.0",
@@ -520,6 +535,21 @@ checksum = "3ff09972d4073aa8c299395be75161d582e7629cd663171d62af73c8d50dba3f"
 dependencies = [
  "defmt",
  "embedded-io",
+]
+
+[[package]]
+name = "embedded-nrf24l01-async"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aa240c785f53d343af18709a1374f3b000ed92fc7bc3766aff86a6860eea530"
+dependencies = [
+ "bitfield",
+ "defmt",
+ "defmt-rtt",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "log",
+ "nb 0.1.3",
 ]
 
 [[package]]
@@ -686,6 +716,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "log"
+version = "0.4.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
+
+[[package]]
 name = "nb"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -699,6 +735,29 @@ name = "nb"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d5439c4ad607c3c23abf66de8c8bf57ba8adcd1f129e699851a6e43935d339d"
+
+[[package]]
+name = "nrf24_driver"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "defmt",
+ "defmt-rtt",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-stm32",
+ "embassy-sync 0.5.0",
+ "embassy-time",
+ "embassy-usb",
+ "embedded-hal 0.2.7",
+ "embedded-hal-async",
+ "embedded-nrf24l01-async",
+ "futures",
+ "heapless 0.8.0",
+ "nb 1.1.0",
+ "panic-probe",
+]
 
 [[package]]
 name = "num-traits"
@@ -848,6 +907,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.79",
+]
+
+[[package]]
+name = "shared-bus"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6b8d3f0e34309c22ca4a9a27d24fa493e31573485f3493802b75b9d706756a6"
+dependencies = [
+ "embedded-hal 0.2.7",
+ "nb 1.1.0",
 ]
 
 [[package]]

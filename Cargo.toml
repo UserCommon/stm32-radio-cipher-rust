@@ -2,6 +2,6 @@
 members = [
     "board1",
     "board2",
-    "cmt2300a",
+    "nrf24_driver"
 ]
 resolver = "2"
