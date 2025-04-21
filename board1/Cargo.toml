@@ -25,9 +25,8 @@ futures = { version = "0.3.17", default-features = false, features = ["async-awa
 heapless = { version = "0.8", default-features = false }
 nb = "1.0.0"
 shared-bus = "0.3.1"
+embedded-io = "0.6.1"
 
-embedded-nrf24l01-async = "0.3.1"
-nrf24_driver = { path = "../nrf24_driver" }
 
 [profile.dev]
 opt-level = "s"
