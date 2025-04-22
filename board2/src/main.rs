@@ -3,6 +3,9 @@
 
 
 // RECV, BLUE LIGHT BOARD
+use secure_radio::core::default_ciphers::MagmaHamming;
+use secure_radio::core::ecc::ErrorCorrectionCode;
+use secure_radio::core::GeneralCipher;
 
 use core::{convert::Infallible, fmt};
 
@@ -34,6 +37,7 @@ async fn main(spawner: Spawner) {
 #[embassy_executor::task]
 async fn recv_data(interval: Duration)
 {
+    let decoder = MagmaHamming::default();
     let config = embassy_stm32::Config::default();
     let p = embassy_stm32::init(config);
     let mut led = Output::new(p.PC13, Level::Low, Speed::Medium);
@@ -48,17 +52,22 @@ async fn recv_data(interval: Duration)
         Config::default(),          // Конфигурация по умолчанию
     ).unwrap();
 
-    let mut buffer = [0u8; 12];
+    let mut buffer = [0u8; 16];
     loop {
         led.set_low();
         // unwrap need to be handled
-        uart
-            .read(&mut buffer)
-            .await
-            .unwrap();
-        println!("{:?}", core::str::from_utf8(&buffer).unwrap());
+        match uart
+                    .read(&mut buffer)
+                    .await {
+            Ok(_) => {},
+            Err(_) => {Timer::after(interval).await; continue;},
+        }
+        let data = decoder.general_decrypt(buffer).unwrap();
+        println!("{:?}", data);
+        
         led.set_high();
-        buffer = [0u8; 12];
+        buffer = [0u8; 16];
+
         Timer::after(interval).await;
     }
     //let _ = uart.read(&mut buffer).await.unwrap();

@@ -4,6 +4,9 @@
 
 // RECV, BLUE LIGHT BOARD
 
+use secure_radio::core::default_ciphers::MagmaHamming;
+use secure_radio::core::GeneralCipher;
+
 use core::{convert::Infallible, fmt};
 
 use defmt::{error, info, println, unwrap};
@@ -34,6 +37,7 @@ async fn main(spawner: Spawner) {
 #[embassy_executor::task]
 async fn send_data(interval: Duration)
 {
+    let encoder = MagmaHamming::default();
     let config = embassy_stm32::Config::default();
     let p = embassy_stm32::init(config);
     // Blink led if sent
@@ -51,11 +55,9 @@ async fn send_data(interval: Duration)
 
     loop {
         led.set_low();
-        let data = b"Hello, UART!";
-        match uart.write(data).await {
-            Ok(_) => {},
-            Err(_) => {Timer::after(interval).await; continue;},
-        }
+        let data: u64 = 131;
+        let data = encoder.general_encrypt(data).unwrap();
+        uart.write(&data).await.unwrap();
 
         led.set_high();
         println!("sent: {:?}", data);

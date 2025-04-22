@@ -23,8 +23,9 @@ futures = { version = "0.3.17", default-features = false, features = ["async-awa
 heapless = { version = "0.8", default-features = false }
 nb = "1.0.0"
 
-embedded-nrf24l01-async = "0.3.1"
-nrf24_driver = { path = "../nrf24_driver" }
+secure-radio = { version = "0.1.0", git = "https://github.com/UserCommon/secure-radio" } 
+
+
 
 [profile.dev]
 opt-level = "s"
