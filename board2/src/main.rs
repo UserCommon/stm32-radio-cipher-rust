@@ -25,7 +25,7 @@ async fn main(spawner: Spawner) {
     // Peripherals
 
     // LED TASK
-    // let led = Output::new(p.PC13, Level::Low, Speed::Medium);
+    // 
     unwrap!(spawner.spawn(recv_data(Duration::from_millis(1000))));
 }
 
@@ -36,6 +36,7 @@ async fn recv_data(interval: Duration)
 {
     let config = embassy_stm32::Config::default();
     let p = embassy_stm32::init(config);
+    let mut led = Output::new(p.PC13, Level::Low, Speed::Medium);
 
     let mut uart = Uart::new(
         p.USART1,                   // Переферийный объект
@@ -47,14 +48,17 @@ async fn recv_data(interval: Duration)
         Config::default(),          // Конфигурация по умолчанию
     ).unwrap();
 
-    let mut buffer = [0u8; 128];
+    let mut buffer = [0u8; 12];
     loop {
+        led.set_low();
+        // unwrap need to be handled
         uart
             .read(&mut buffer)
             .await
             .unwrap();
-        println!("{:?}", buffer);
-        buffer = [0u8; 128];
+        println!("{:?}", core::str::from_utf8(&buffer).unwrap());
+        led.set_high();
+        buffer = [0u8; 12];
         Timer::after(interval).await;
     }
     //let _ = uart.read(&mut buffer).await.unwrap();

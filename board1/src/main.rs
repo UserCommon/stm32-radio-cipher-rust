@@ -36,6 +36,8 @@ async fn send_data(interval: Duration)
 {
     let config = embassy_stm32::Config::default();
     let p = embassy_stm32::init(config);
+    // Blink led if sent
+    let mut led = Output::new(p.PC13, Level::Low, Speed::Medium);
 
     let mut uart = Uart::new(
         p.USART1,                   // Переферийный объект
@@ -48,11 +50,14 @@ async fn send_data(interval: Duration)
     ).unwrap();
 
     loop {
+        led.set_low();
         let data = b"Hello, UART!";
-        uart
-            .write(data)
-            .await
-            .unwrap();
+        match uart.write(data).await {
+            Ok(_) => {},
+            Err(_) => {Timer::after(interval).await; continue;},
+        }
+
+        led.set_high();
         println!("sent: {:?}", data);
         // let mut buffer = [0u8; 128];
         Timer::after(interval).await;
