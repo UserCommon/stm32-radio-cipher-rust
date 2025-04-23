@@ -12,7 +12,7 @@ use embassy_time::with_timeout;
 use defmt::{error, info, println, unwrap};
 use embassy_executor::Spawner;
 use embassy_stm32::bind_interrupts;
-use embassy_stm32::peripherals::{self, DMA1_CH5, DMA1_CH4, DMA1_CH6, DMA1_CH7, PA10, PA9, PA2, PA3, USART1, USART2};
+use embassy_stm32::peripherals::{self, DMA1_CH4, DMA1_CH5, DMA1_CH6, DMA1_CH7, PA10, PA2, PA3, PA9, PC13, USART1, USART2};
 use embassy_stm32::usart::{self, Config, Uart, UartRx, UartTx};
 use embedded_hal::{self, digital::v2::OutputPin};
 use embassy_time::{Delay, Duration, Timer};
@@ -29,22 +29,12 @@ async fn main(spawner: Spawner) {
     // Peripherals
 
     // LED TASK
-    // let led = Output::new(p.PC13, Level::Low, Speed::Medium);
-    unwrap!(spawner.spawn(send_data(Duration::from_millis(100))));
-}
-
-
-
-#[embassy_executor::task]
-async fn send_data(interval: Duration)
-{
-    let encoder = MagmaHamming::default();
     let config = embassy_stm32::Config::default();
     let p = embassy_stm32::init(config);
-    // Blink led if sent
     let mut led = Output::new(p.PC13, Level::Low, Speed::Medium);
+    led.set_high();
 
-    let mut uart1 = Uart::new(
+    let (uart1tx, uart1rx) = Uart::new(
         p.USART1,                   // Переферийный объект
         p.PA10,              // Пин приема данных (RX)
         p.PA9,               // Пин передачи данных (TX)
@@ -52,9 +42,9 @@ async fn send_data(interval: Duration)
         p.DMA1_CH4,                 // DMA для передачи данных
         p.DMA1_CH5,                 // DMA для приема данных
         Config::default(),          // Конфигурация по умолчанию
-    ).unwrap();
+    ).unwrap().split();
 
-    let mut uart2 = Uart::new(
+    let (uart2tx, uart2rx) = Uart::new(
         p.USART2,          // Периферийный объект для USART2
         p.PA3,             // RX (прием)
         p.PA2,             // TX (передача)
@@ -62,22 +52,68 @@ async fn send_data(interval: Duration)
         p.DMA1_CH7,        // DMA канал для TX
         p.DMA1_CH6,        // DMA канал для RX
         Config::default(), // Конфигурация по умолчанию
-    ).unwrap();
+    ).unwrap().split();
+
+    unwrap!(spawner.spawn(send_data(uart1tx, uart2rx, Duration::from_millis(100))));
+    unwrap!(spawner.spawn(recv_data(uart1rx, uart2tx, led, Duration::from_millis(100))));
+}
+
+#[embassy_executor::task]
+async fn send_data(
+    mut uart1tx: UartTx<'static, USART1, DMA1_CH4>,
+    mut uart2rx: UartRx<'static, USART2, DMA1_CH6>,
+    interval: Duration,
+)
+{
+    let encoder = MagmaHamming::default();
+    // Blink led if sent
     
     let mut rcvd = [0u8;8];
     loop {
         // let n = read_uart_line(&mut uart2, &mut rcvd).await;
-        uart2.read(&mut rcvd).await.unwrap();
+        uart2rx.read(&mut rcvd).await.unwrap();
         let line = core::str::from_utf8(&rcvd[..8]).unwrap_or("<bad utf8>");
         println!("{:?}", line);
-        led.set_low();
-        // let data: u64 = 131;
-        // let data = encoder.general_encrypt(data).unwrap();
-        // uart1.write(&data).await.unwrap();
+        // led.set_low();
+        let data: u64 = u64::from_be_bytes(rcvd);
+        let data = encoder.general_encrypt(data).unwrap();
+        uart1tx.write(&data).await.unwrap();
 
+        // led.set_high();
+        println!("sent: {:?}", data);
+        Timer::after(interval).await;
+    }
+    //let _ = uart.read(&mut buffer).await.unwrap();
+}
+
+#[embassy_executor::task]
+async fn recv_data(
+    mut uart1rx: UartRx<'static, USART1, DMA1_CH5>,
+    mut uart2tx: UartTx<'static, USART2, DMA1_CH7>,
+    mut led: Output<'static, PC13>,
+    interval: Duration,
+)
+{
+    let decoder = MagmaHamming::default();
+    let mut buffer = [0u8; 16];
+    loop {
+        led.set_low();
+        // unwrap need to be handled
+        match uart1rx
+                    .read(&mut buffer)
+                    .await {
+            Ok(_) => {},
+            Err(_) => {Timer::after(interval).await; continue;},
+        }
+        println!("read: {:?}", buffer);
+        let data = decoder.general_decrypt(buffer).unwrap();
+        let bytes: [u8; 8] = data.to_be_bytes();
+        let s = core::str::from_utf8(&bytes).unwrap_or("<bad utf8>");
+        println!("decoded: {:?}", s);
+        // uart2tx.write(&buffer).await.unwrap();
         led.set_high();
-        // println!("sent: {:?}", data);
-        // let mut buffer = [0u8; 128];
+        buffer = [0u8; 16];
+
         Timer::after(interval).await;
     }
     //let _ = uart.read(&mut buffer).await.unwrap();
