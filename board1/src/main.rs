@@ -110,7 +110,7 @@ async fn recv_data(
         let bytes: [u8; 8] = data.to_be_bytes();
         let s = core::str::from_utf8(&bytes).unwrap_or("<bad utf8>");
         println!("decoded: {:?}", s);
-        // uart2tx.write(&buffer).await.unwrap();
+        uart2tx.write(&buffer).await.unwrap();
         led.set_high();
         buffer = [0u8; 16];
 
