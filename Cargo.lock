@@ -71,29 +71,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "board2"
-version = "0.1.0"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "defmt",
- "defmt-rtt",
- "embassy-executor",
- "embassy-futures",
- "embassy-stm32",
- "embassy-sync 0.5.0",
- "embassy-time",
- "embassy-usb",
- "embedded-hal 0.2.7",
- "embedded-hal-async",
- "futures",
- "heapless 0.8.0",
- "nb 1.1.0",
- "panic-probe",
- "secure-radio",
-]
-
-[[package]]
 name = "bxcan"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
